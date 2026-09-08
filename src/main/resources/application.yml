@@ -1,0 +1,24 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: mcp-keycloak-guard
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/mcp-guard}
+
+  ai:
+    mcp:
+      server:
+        name: mcp-keycloak-guard
+        version: 0.1.0
+        type: SYNC
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

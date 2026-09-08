@@ -1,0 +1,71 @@
+{
+  "realm": "mcp-guard",
+  "enabled": true,
+  "sslRequired": "none",
+  "verifyEmail": false,
+  "resetPasswordAllowed": false,
+  "requiredActions": [
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 30,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 50,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 20,
+      "config": {}
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "mcp-reader", "description": "Can call read-only MCP tools" },
+      { "name": "mcp-admin", "description": "Can call privileged MCP tools" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "mcp-guard-client",
+      "publicClient": true,
+      "enabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["*"],
+      "standardFlowEnabled": false,
+      "fullScopeAllowed": true
+    }
+  ],
+  "users": [
+    {
+      "username": "reader",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": "reader", "temporary": false }],
+      "realmRoles": ["mcp-reader"]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "realmRoles": ["mcp-reader", "mcp-admin"]
+    }
+  ]
+}
