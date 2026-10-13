@@ -18,6 +18,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -174,5 +179,33 @@ class GuardedToolsIT {
     assertThat(admin.toString()).contains("Restart signal sent");
 
     assertThat(callTool(readerToken, "restartDownstreamService").isError()).isTrue();
+  }
+
+  @Test
+  void concurrentMcpClientsKeepTheirOwnRoles() throws Exception {
+    String readerToken = obtainAccessToken("reader", "reader");
+    String adminToken = obtainAccessToken("admin", "admin");
+    CountDownLatch start = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<CallToolResult> reader =
+          executor.submit(
+              () -> {
+                start.await();
+                return callTool(readerToken, "restartDownstreamService");
+              });
+      Future<CallToolResult> admin =
+          executor.submit(
+              () -> {
+                start.await();
+                return callTool(adminToken, "restartDownstreamService");
+              });
+      start.countDown();
+
+      assertThat(reader.get(15, TimeUnit.SECONDS).isError()).isTrue();
+      assertThat(admin.get(15, TimeUnit.SECONDS).isError()).isFalse();
+    } finally {
+      executor.shutdownNow();
+    }
   }
 }
