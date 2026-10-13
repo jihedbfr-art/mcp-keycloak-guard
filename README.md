@@ -18,38 +18,30 @@ data or triggers a real action.
 This project wires Spring AI's MCP server support to Spring Security's OAuth2 resource server
 and puts `@PreAuthorize` on individual tool methods, backed by realm roles pulled straight out
 of the caller's Keycloak-issued JWT. A `mcp-reader` token can call a read-only tool; only a
-`mcp-admin` token can call a privileged tool. The integration test confirms that the
-reader is denied at the tool method. The HTTP/MCP response still needs an end-to-end test.
+`mcp-admin` token can call a privileged tool. An SSE/MCP integration test now covers
+the full request path: unauthenticated connection gets HTTP 401, a reader can call the
+status tool but receives an MCP tool error for the admin tool, and an admin can call both.
 
-## Try it in three commands
-
-```bash
-docker compose -f docker/docker-compose.yml up -d   # starts Keycloak with the demo realm imported
-mvn spring-boot:run                                  # starts the MCP server on :8081
-```
-
-Get a token for the `reader` user (role `mcp-reader` only) and call the read-only tool:
+## Run the example
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/realms/mcp-guard/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=mcp-guard-client -d username=reader -d password=reader \
-  | jq -r .access_token)
-
-curl -s http://localhost:8081/mcp -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"getServerStatus","arguments":{}}}'
+docker compose -f docker/docker-compose.yml up -d
+mvn spring-boot:run
 ```
 
-Now try the privileged tool with the same reader token. Its HTTP/MCP response
-has not yet been covered by an automated end-to-end test:
+This version of Spring AI exposes **SSE**, with the connection at `/sse` and
+JSON-RPC messages at `/mcp/message`. An MCP client must send the bearer token
+on both requests. A direct POST to `/mcp` returns 404 in this version.
+
+Run the automated reader/admin demonstration with Docker available:
 
 ```bash
-curl -s http://localhost:8081/mcp -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"restartDownstreamService","arguments":{"serviceName":"billing"}}}'
+mvn verify
 ```
 
-Get a token for `admin` (roles `mcp-reader` + `mcp-admin`) instead and the same call succeeds.
+The test obtains tokens from the bundled demo realm, opens authenticated SSE
+connections, and calls both tools through an MCP client. It checks the result
+after an admin call with the reader token again to catch context leakage.
 
 ## How it's wired
 
@@ -62,9 +54,11 @@ Get a token for `admin` (roles `mcp-reader` + `mcp-admin`) instead and the same 
 - **Authorization**: [`GuardedTools`](src/main/java/dev/jihed/mcpguard/tools/GuardedTools.java) —
   each `@Tool` method carries its own `@PreAuthorize("hasRole(...)")`. This is the actual point of
   the project: authorization lives next to the tool it protects, not in one global filter.
+- **Context propagation**: [`SecurityContextPropagationConfig`](src/main/java/dev/jihed/mcpguard/config/SecurityContextPropagationConfig.java)
+  carries the authenticated request context to the Reactor worker that invokes the tool.
 - **MCP transport**: Spring AI's `spring-ai-starter-mcp-server-webmvc`, same starter used in
   [`social-publisher-mcp`](https://github.com/jihedbfr-art/engineering-library/tree/main/projects/top-projects/social-publisher-mcp),
-  exposing the tools over streamable HTTP at `/mcp`.
+  exposing the tools through SSE at `/sse` and `/mcp/message`.
 
 ## What it deliberately does not do
 

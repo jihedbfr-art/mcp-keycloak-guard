@@ -27,8 +27,7 @@ public class GuardedTools {
   @Tool(
       description =
           "Simulates a privileged administrative action (e.g. restarting a downstream service). "
-              + "Requires the mcp-admin realm role — a reader-only caller gets a 403, not just a "
-              + "'you're not logged in' error.")
+              + "Requires the mcp-admin realm role. A reader-only MCP caller receives a tool error.")
   @PreAuthorize("hasRole('MCP-ADMIN')")
   public String restartDownstreamService(String serviceName) {
     return "Restart signal sent to '" + serviceName + "' at " + Instant.now();
