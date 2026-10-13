@@ -1,5 +1,7 @@
 # mcp-keycloak-guard
 
+[Lire en français](README.fr.md)
+
 Reference MCP server where every tool call is authorized against **Keycloak realm roles** —
 not just "does this caller have a valid token at all", but "is this specific caller allowed to
 call this specific tool".
@@ -16,8 +18,8 @@ data or triggers a real action.
 This project wires Spring AI's MCP server support to Spring Security's OAuth2 resource server
 and puts `@PreAuthorize` on individual tool methods, backed by realm roles pulled straight out
 of the caller's Keycloak-issued JWT. A `mcp-reader` token can call a read-only tool; only a
-`mcp-admin` token can call a tool that does something privileged. Wrong role gets a 403, not a
-silent success.
+`mcp-admin` token can call a privileged tool. The integration test confirms that the
+reader is denied at the tool method. The HTTP/MCP response still needs an end-to-end test.
 
 ## Try it in three commands
 
@@ -38,7 +40,8 @@ curl -s http://localhost:8081/mcp -H "Authorization: Bearer $TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"getServerStatus","arguments":{}}}'
 ```
 
-Now try the privileged tool with the same reader token — it's rejected:
+Now try the privileged tool with the same reader token. Its HTTP/MCP response
+has not yet been covered by an automated end-to-end test:
 
 ```bash
 curl -s http://localhost:8081/mcp -H "Authorization: Bearer $TOKEN" \
