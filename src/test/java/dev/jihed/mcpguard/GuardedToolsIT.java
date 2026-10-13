@@ -164,6 +164,16 @@ class GuardedToolsIT {
                 HttpResponse.BodyHandlers.ofString());
     assertThat(anonymous.statusCode()).isEqualTo(401);
 
+    HttpResponse<String> invalid =
+        HttpClient.newHttpClient()
+            .send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/sse"))
+                    .header("Authorization", "Bearer invalid-token")
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+    assertThat(invalid.statusCode()).isEqualTo(401);
+
     String readerToken = obtainAccessToken("reader", "reader");
     CallToolResult readerStatus = callTool(readerToken, "getServerStatus");
     assertThat(readerStatus.isError()).isFalse();
@@ -179,6 +189,10 @@ class GuardedToolsIT {
     assertThat(admin.toString()).contains("Restart signal sent");
 
     assertThat(callTool(readerToken, "restartDownstreamService").isError()).isTrue();
+
+    String observerToken = obtainAccessToken("observer", "observer");
+    assertThat(callTool(observerToken, "getServerStatus").isError()).isTrue();
+    assertThat(callTool(observerToken, "restartDownstreamService").isError()).isTrue();
   }
 
   @Test

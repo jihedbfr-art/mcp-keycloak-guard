@@ -8,7 +8,7 @@ Serveur MCP de démonstration qui contrôle l'accès à chaque outil selon les r
 
 Un jeton valide identifie l'appelant. Il ne suffit pas à déterminer quels outils il peut exécuter. Ce projet associe le serveur MCP de Spring AI au serveur de ressources OAuth2 de Spring Security. Les rôles du jeton Keycloak deviennent des autorisations Spring ; chaque méthode exposée comme outil porte sa propre règle `@PreAuthorize`.
 
-Le rôle `mcp-reader` donne accès à l'outil de lecture. L'outil d'administration exige `mcp-admin`. Le test d'intégration couvre le trajet SSE/MCP complet : une connexion sans jeton reçoit HTTP 401, le lecteur obtient une erreur MCP sur l'outil d'administration et l'administrateur peut l'appeler.
+Le rôle `mcp-reader` donne accès à l'outil de lecture. L'outil d'administration exige `mcp-admin`. Le test d'intégration couvre le trajet SSE/MCP complet : une connexion sans jeton ou avec un jeton invalide reçoit HTTP 401, le lecteur obtient une erreur MCP sur l'outil d'administration et l'administrateur peut l'appeler. Un utilisateur de test sans rôle MCP est refusé sur les deux outils.
 
 ## Essai local
 
@@ -27,7 +27,7 @@ Pour reproduire le parcours lecteur/administrateur automatisé avec Docker actif
 mvn verify
 ```
 
-Le test obtient les jetons du domaine de démonstration, ouvre les connexions SSE authentifiées et appelle les deux outils avec un client MCP. Il essaie de nouveau le jeton lecteur après l'appel administrateur pour détecter toute fuite de contexte.
+Le test obtient les jetons de son domaine Keycloak, ouvre les connexions SSE authentifiées et appelle les deux outils avec un client MCP. Il essaie de nouveau le jeton lecteur après l'appel administrateur, puis lance deux clients simultanés pour détecter une fuite de contexte. Ce dernier contrôle ne constitue pas un test de charge.
 
 ## Organisation
 
@@ -39,13 +39,13 @@ Le test obtient les jetons du domaine de démonstration, ouvre les connexions SS
 
 ## Limites
 
-Le projet ne gère pas l'échange de jetons OAuth2 pour la délégation d'un agent au nom d'un utilisateur. Le domaine Keycloak fourni est une démonstration à deux rôles et deux utilisateurs, sans configuration de production.
+Le projet ne gère pas l'échange de jetons OAuth2 pour la délégation d'un agent au nom d'un utilisateur. Le domaine de démonstration fourni pour l'application a deux rôles et deux utilisateurs ; le domaine réservé aux tests ajoute un utilisateur sans rôle MCP. Aucun des deux n'est une configuration de production.
 
 Le test `GuardedToolsIT` utilise Keycloak avec Testcontainers et un client MCP SSE. Il nécessite un moteur Docker actif. Le refus d'un outil est transmis comme erreur MCP, pas comme HTTP 403 ; la connexion non authentifiée reçoit HTTP 401.
 
 ## Suite envisagée
 
-- Tester le comportement avec plusieurs clients simultanés et des transports futurs.
+- Étendre le contrôle de concurrence au-delà de deux clients et vérifier les transports futurs.
 - Ajouter un second jeu d'outils indépendant pour tester le même modèle d'accès.
 - Étudier les portées OAuth2 par outil et la délégation par échange de jetons.
 

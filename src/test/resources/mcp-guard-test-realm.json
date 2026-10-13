@@ -66,6 +66,14 @@
       "requiredActions": [],
       "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
       "realmRoles": ["mcp-reader", "mcp-admin"]
+    },
+    {
+      "username": "observer",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [{ "type": "password", "value": "observer", "temporary": false }],
+      "realmRoles": []
     }
   ]
 }

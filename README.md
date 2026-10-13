@@ -21,6 +21,7 @@ of the caller's Keycloak-issued JWT. A `mcp-reader` token can call a read-only t
 `mcp-admin` token can call a privileged tool. An SSE/MCP integration test now covers
 the full request path: unauthenticated connection gets HTTP 401, a reader can call the
 status tool but receives an MCP tool error for the admin tool, and an admin can call both.
+The test also rejects an invalid token and denies both tools to a test user with no MCP role.
 
 ## Run the example
 
@@ -42,6 +43,8 @@ mvn verify
 The test obtains tokens from the bundled demo realm, opens authenticated SSE
 connections, and calls both tools through an MCP client. It checks the result
 after an admin call with the reader token again to catch context leakage.
+It also starts a reader and an administrator client together; this is an isolation check,
+not a load test.
 
 ## How it's wired
 
