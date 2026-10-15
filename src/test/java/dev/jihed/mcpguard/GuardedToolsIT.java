@@ -7,10 +7,28 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import dev.jihed.mcpguard.tools.GuardedTools;
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,7 +54,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * admin tool; an admin token can call both.
  */
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 class GuardedToolsIT {
 
   private static final String KEYCLOAK_IMAGE =
@@ -59,6 +77,7 @@ class GuardedToolsIT {
   @Autowired private GuardedTools tools;
   @Autowired private JwtDecoder jwtDecoder;
   @Autowired private JwtAuthenticationConverter jwtAuthenticationConverter;
+  @LocalServerPort private int port;
 
   @AfterEach
   void clearSecurityContext() {
@@ -120,5 +139,87 @@ class GuardedToolsIT {
             AccessDeniedException.class,
             org.springframework.security.authentication.AuthenticationCredentialsNotFoundException
                 .class);
+  }
+
+  private CallToolResult callTool(String token, String toolName) {
+    HttpClientSseClientTransport transport =
+        HttpClientSseClientTransport.builder("http://localhost:" + port)
+            .requestBuilder(HttpRequest.newBuilder().header("Authorization", "Bearer " + token))
+            .build();
+    try (McpSyncClient client =
+        McpClient.sync(transport).requestTimeout(Duration.ofSeconds(10)).build()) {
+      client.initialize();
+      return client.callTool(new CallToolRequest(toolName, Map.of("serviceName", "billing")));
+    }
+  }
+
+  @Test
+  void sseMcpRequiresAuthenticationAndEnforcesToolRoles() throws Exception {
+    HttpResponse<String> anonymous =
+        HttpClient.newHttpClient()
+            .send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/sse"))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+    assertThat(anonymous.statusCode()).isEqualTo(401);
+
+    HttpResponse<String> invalid =
+        HttpClient.newHttpClient()
+            .send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/sse"))
+                    .header("Authorization", "Bearer invalid-token")
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+    assertThat(invalid.statusCode()).isEqualTo(401);
+
+    String readerToken = obtainAccessToken("reader", "reader");
+    CallToolResult readerStatus = callTool(readerToken, "getServerStatus");
+    assertThat(readerStatus.isError()).isFalse();
+    assertThat(readerStatus.toString()).contains("up at");
+
+    CallToolResult reader = callTool(readerToken, "restartDownstreamService");
+    assertThat(reader.isError()).isTrue();
+    assertThat(reader.toString()).contains("Access Denied").doesNotContain("Restart signal sent");
+
+    CallToolResult admin =
+        callTool(obtainAccessToken("admin", "admin"), "restartDownstreamService");
+    assertThat(admin.isError()).isFalse();
+    assertThat(admin.toString()).contains("Restart signal sent");
+
+    assertThat(callTool(readerToken, "restartDownstreamService").isError()).isTrue();
+
+    String observerToken = obtainAccessToken("observer", "observer");
+    assertThat(callTool(observerToken, "getServerStatus").isError()).isTrue();
+    assertThat(callTool(observerToken, "restartDownstreamService").isError()).isTrue();
+  }
+
+  @Test
+  void concurrentMcpClientsKeepTheirOwnRoles() throws Exception {
+    String readerToken = obtainAccessToken("reader", "reader");
+    String adminToken = obtainAccessToken("admin", "admin");
+    CountDownLatch start = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<CallToolResult> reader =
+          executor.submit(
+              () -> {
+                start.await();
+                return callTool(readerToken, "restartDownstreamService");
+              });
+      Future<CallToolResult> admin =
+          executor.submit(
+              () -> {
+                start.await();
+                return callTool(adminToken, "restartDownstreamService");
+              });
+      start.countDown();
+
+      assertThat(reader.get(15, TimeUnit.SECONDS).isError()).isTrue();
+      assertThat(admin.get(15, TimeUnit.SECONDS).isError()).isFalse();
+    } finally {
+      executor.shutdownNow();
+    }
   }
 }
